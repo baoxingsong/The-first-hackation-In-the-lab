@@ -1,0 +1,117 @@
+---
+title: "hackaton by litianyi"
+output: html_document
+---
+# 一、 to gatk
+## to gvcf
+```
+"/home/xuql/tassel-5-standalone/run_pipeline.pl" -Xmx100G -debug -MAFToGVCFPlugin -referenceFasta "/home/xuql/NAM_anchorwave/B73/Zm-B73-REFERENCE-NAM-5.0.fa" -mafFile "/home/xuql/NAM_anchorwave/B97/B97.maf" -sampleName B97_anchorwave -gvcfOutput /home/xuql/NAM_anchorwave/B97/B97ToB73.gvcf -fillGaps false > /home/xuql/NAM_anchorwave/B97/B97_outputMafToGVCF.txt 
+```
+
+## vcf index
+```
+ gatk LeftAlignAndTrimVariants \
+   -R "/home/xuql/NAM_anchorwave/B73/Zm-B73-REFERENCE-NAM-5.0_clean.fa" \
+   -V "/home/xuql/NAM_anchorwave/B97/B97ToB73.gvcf" \
+   -O "/home/xuql/NAM_anchorwave/B97/B97ToB73_gatk.vcf"
+```
+## genomic database
+```
+grep ">" Zm-B73-REFERENCE-NAM-5.0.fa | sed 's/>//g' | head -10 > interval.list
+```
+genomicsdb-segment-size(缓冲区大小，越大存储次数越少，字节) ；genomicsdb-vcf-buffer-size(缓冲区大小，最大容纳空间，需要足够大来储存全文)
+```
+gatk --java-options "-Xmx400g -Xms400g" GenomicsDBImport \
+      -V "/home/xuql/NAM_anchorwave/B97/B97ToB73_gatk.vcf" \
+      -V "/home/xuql/NAM_anchorwave/CML103/CML103ToB73_gatk.vcf" \
+      -V "/home/xuql/NAM_anchorwave/Tzi8/Tzi8ToB73_gatk.vcf" \
+      --genomicsdb-workspace-path all_database \
+      --tmp-dir /home/xuql/tmp/ \
+      --genomicsdb-segment-size 1048576000 --genomicsdb-vcf-buffer-size 10000000000 \
+      -L interval.list  --reader-threads 5
+```
+之前为-L 10（只有10号染色体的,可为10:1-10000,表示只保留10号染色体1-10000bbp部分）
+```
+gatk --java-options "-Xmx400g -Xms400g" GenomicsDBImport \
+      -V "/home/xuql/NAM_anchorwave/CML228/CML228ToB73_gatk.vcf" \
+      -V "/home/xuql/NAM_anchorwave/CML52/CML52ToB73_gatk.vcf" \
+      -V "/home/xuql/NAM_anchorwave/CML69/CML69ToB73_gatk.vcf"       -V "/home/xuql/NAM_anchorwave/CML247/CML247ToB73_gatk.vcf" \
+      --genomicsdb-update-workspace-path allchr_database       --tmp-dir /home/xuql/tmp/ \
+      --genomicsdb-segment-size 1048576000 --genomicsdb-vcf-buffer-size 10000000000 \
+      -L "/home/xuql/NAM_anchorwave/interval.list"  --reader-threads 5
+```
+## 查找有害突变
+```
+gatk --java-options "-Xmx500g  -Xms500g  -XX:ParallelGCThreads=10" GenotypeGVCFs \
+   -R "/home/xuql/NAM_anchorwave/B73/Zm-B73-REFERENCE-NAM-5.0_clean.fa" \
+   -stand-call-conf 0 \
+   -ploidy 1 \
+   -V gendb://all_database \
+   -O out_all_gatk1.vcf.gz
+```
+## 左对齐
+```
+ gatk LeftAlignAndTrimVariants \
+   -R "/home/xuql/NAM_anchorwave/B73/Zm-B73-REFERENCE-NAM-5.0_clean.fa" \
+   -V "/home/xuql/NAM_anchorwave/out_all_gatk1.vcf.gz" \
+   -O "/home/xuql/NAM_anchorwave/allToB73_gatk.vcf" \
+   --max-indel-length 2000000 &
+   
+```
+
+# 二、ancestral_genome
+
+## to psl
+```
+python2 "/home/xuql/ancestral_genome/maf-convert" psl "/home/xuql/AncestralMaize/byv5/luxurianstob73/luxurians_b73.maf" > "/home/xuql/AncestralMaize/byv5/luxurianstob73/chain_net/all.psl"
+```
+## 使染色体名一致
+```
+sed -i 's/Zm-Mo17-REFERENCE-CAU-1.0.fa.//' "/home/xuql/AncestralMaize/2_byv4/alignb73againstmo17/chain_net/all.psl"
+sed -i 's/Zea_mays.AGPv4.dna.toplevel.fa.//' "/home/xuql/AncestralMaize/2_byv4/alignb73againstmo17/chain_net/all.psl"
+```
+
+## axtChain
+```
+"/home/xuql/ancestral_genome/GenomeAlignmentTools/kent/bin/axtChain" \
+ -linearGap=loose -psl "/home/xuql/AncestralMaize/2_byv4/alignb73againstmo17/chain_net/all.psl" \
+ -faQ -faT "/home/xuql/AncestralMaize/2_byv4/sorghum_maize/Zea_mays.AGPv4.dna.toplevel.fa" \
+ "/home/xuql/AncestralMaize/2_byv4/alignb73againstmo17/Zm-Mo17-REFERENCE-CAU-1.0.fa" \
+ "/home/xuql/AncestralMaize/2_byv4/alignb73againstmo17/chain_net/axt_all.chain"
+```
+
+## sort chain
+```
+"/home/xuql/ancestral_genome/GenomeAlignmentTools/kent/bin/chainMergeSort" \
+"/home/xuql/AncestralMaize/2_byv4/alignb73againstmo17/chain_net/axt_all.chain" > "/home/xuql/AncestralMaize/2_byv4/alignb73againstmo17/chain_net/mo17_all.chain"
+```
+
+## make size file
+```
+"/home/xuql/ancestral_genome/faSize" -detailed "/home/xuql/AncestralMaize/2_byv4/sorghum_maize/Zea_mays.AGPv4.dna.toplevel.fa" > "/home/xuql/AncestralMaize/2_byv4/sorghum_maize/Zea_mays_v4_B73.size"
+"/home/xuql/ancestral_genome/faSize" -detailed "/home/xuql/AncestralMaize/2_byv4/alignb73againstmo17/Zm-Mo17-REFERENCE-CAU-1.0.fa" > "/home/xuql/AncestralMaize/2_byv4/alignb73againstmo17/Zm-Mo17.size"
+```
+## chainPreNet
+```
+"/home/xuql/ancestral_genome/GenomeAlignmentTools/kent/bin/chainPreNet" \
+"/home/xuql/AncestralMaize/2_byv4/alignb73againstmo17/chain_net/mo17_all.chain" \
+"/home/xuql/AncestralMaize/2_byv4/sorghum_maize/Zea_mays_v4_B73.size" \
+"/home/xuql/AncestralMaize/2_byv4/alignb73againstmo17/Zm-Mo17.size" \
+"/home/xuql/AncestralMaize/2_byv4/alignb73againstmo17/chain_net/mo17_all.preNet" 
+```
+
+## chainNet
+```
+"/home/xuql/ancestral_genome/GenomeAlignmentTools/bin/chainNet" \
+"/home/xuql/AncestralMaize/2_byv4/sorghum_maize/chain_net/Sorghum_bicolor_all.preNet"   \
+"/home/xuql/AncestralMaize/2_byv4/sorghum_maize/Zea_mays_v4_B73.size" \
+"/home/xuql/AncestralMaize/2_byv4/sorghum_maize/Sorghum_bicolor.size" \
+"/home/xuql/AncestralMaize/2_byv4/sorghum_maize/chain_net/Sorghum_bicolor_B73v4ref.net" \
+"/home/xuql/AncestralMaize/2_byv4/sorghum_maize/chain_net/B73v4ref_Sorghum_bicolor.net"
+```
+
+获得Sorghum_bicolor_B73v4ref.net、Zm-Mo17_B73v4ref.net及mo17_all.chain、Sorghum_bicolor_all.chain"传输至DESCHRAMBLER程序中预测祖先基因组
+
+DESCHRAMBLER生成的_Conserved.Segments与anges的输入PARAMETERS_MONOCOTS_BAB"应该一致
+
+

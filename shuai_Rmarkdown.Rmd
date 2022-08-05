@@ -1,0 +1,110 @@
+---
+title: "Shuai R mark down"
+author: "shuai"
+date: "`r format(Sys.Date(), '%Y-%m-%d')`"
+output:
+  html_document:
+    df_print: paged
+editor_options:
+  chunk_output_type: inline
+---
+
+# 1.vairent calling at Tzi8 and CML69
+
+## 1.1download reference.fa and CML69.maf , Tzi8.maf
+
+    cp ./NAM_anchorwave/B73/Zm-B73-REFERENCE-NAM-5.0.fa ./test2222/
+    cp ./NAM_anchorwave/CML69/Zm-CML69-REFERENCE-NAM-1.0.fa ./test2222/
+    cp ./NAM_anchorwave/CML69/CML69.maf ./test2222/
+    cp ./NAM_anchorwave/Tzi8/Tzi8.maf ./test2222/
+    cp ./NAM_anchorwave/Tzi8/Zm-Tzi8-REFERENCE-NAM-1.0.fa ./test2222/
+
+## 1.2.maf convert to .vcf
+
+    "/home/xuql/tassel-5-standalone/run_pipeline.pl" -Xmx100G -debug -MAFToGVCFPlugin -referenceFasta "/home/xuql/test2222/Zm-B73-REFERENCE-NAM-5.0.fa" -mafFile "/home/xuql/test2222/CML69.maf" -sampleName CML69_anchorwave -gvcfOutput /home/xuql/test2222/CML69ToB73.gvcf -fillGaps false > /home/xuql/test2222/CML69_outputMafToGVCF.txt 
+
+    "/home/xuql/tassel-5-standalone/run_pipeline.pl" -Xmx100G -debug -MAFToGVCFPlugin -referenceFasta "/home/xuql/test2222/Zm-B73-REFERENCE-NAM-5.0.fa" -mafFile "/home/xuql/test2222/Tzi8.maf" -sampleName Tzi8_anchorwave -gvcfOutput /home/xuql/test2222/Tzi8ToB73.gvcf -fillGaps false > /home/xuql/test2222/Tzi8_outputMafToGVCF.txt
+
+## 1.3pre-treatment
+
+    sed -i 's/chr//g' Zm-B73-REFERENCE-NAM-5.0.fa
+    samtools faidx Zm-B73-REFERENCE-NAM-5.0.fa
+    samtools dict Zm-B73-REFERENCE-NAM-5.0.fa >Zm-B73-REFERENCE-NAM-5.0.fa
+
+## 1.4set a index
+
+    gatk LeftAlignAndTrimVariants \
+       -R "/home/xuql/test2222/Zm-B73-REFERENCE-NAM-5.0.fa" \
+       -V "/home/xuql/test2222/CML69ToB73.gvcf" \
+       -O "/home/xuql/test2222/CML69ToB73_gatk.vcf"\
+       --max-indel-length 2000000
+
+    gatk LeftAlignAndTrimVariants \
+       -R "/home/xuql/test2222/Zm-B73-REFERENCE-NAM-5.0.fa" \
+       -V "/home/xuql/test2222/Tzi8ToB73.gvcf" \
+       -O "/home/xuql/test2222/Tzi8ToB73_gatk.vcf"\
+       --max-indel-length 2000000
+
+## 1.5merg in all_database
+
+    gatk --java-options "-Xmx400g -Xms400g" GenomicsDBImport \
+          -V "/home/xuql/test2222/CML69ToB73_gatk.vcf" \
+          -V "/home/xuql/test2222/Tzi8ToB73_gatk.vcf" \
+          --genomicsdb-workspace-path all_database \
+         --tmp-dir /home/xuql/tmp/ \
+          --genomicsdb-segment-size 1048576000 --genomicsdb-vcf-buffer-size 10000000000 \
+          -L 10  # the tenth cheomosome 
+
+## 1.6vairant calling
+
+    gatk --java-options "-Xmx4g" GenotypeGVCFs \
+       -R Zm-B73-REFERENCE-NAM-5.0.fa \
+       -V gendb://all_database \
+       -O output.vcf
+
+## 1.7left alignment
+
+    gatk LeftAlignAndTrimVariants \
+       -R "/home/xuql/test2222/Zm-B73-REFERENCE-NAM-5.0.fa" \
+       -V "/home/xuql/test2222/output.vcf" \
+       -O "/home/xuql/test2222/b73toCML69ToTzi8_gatk.vcf"\
+       --max-indel-length 2000000
+
+## 1.8visualize igv
+
+# 2.ANGES
+
+    https://academic.oup.com/bioinformatics/article/28/18/2388/253938
+    https://cchauve.github.io/ANGES/index.html
+
+## 2.1create enviroment
+
+    conda create --name python27 python=2.7
+    conda activate python27
+    pip install numpy
+
+## 2.2enter software
+
+    python ./Downloads/anges_1.01/src/MASTER/anges_CAR.py /home/wangshuai/Downloads/anges_1.01/examples/plant_genomes/PARAMETERS_MONOCOTS_BAB
+
+## 2.3execute commands,example
+
+    cd ./Downloads/anges_1.01/examples/plant_genomes/
+    python /home/wangshuai/Downloads/anges_1.01/src/MASTER/anges_CAR.py PARAMETERS_MONOCOTS_BAB
+    python /home/wangshuai/Downloads/anges_1.01/src/MASTER/anges_CAR.py PARAMETERS_MONOCOTS_TEL_BAB1
+    python /home/wangshuai/Downloads/anges_1.01/src/MASTER/anges_CAR.py PARAMETERS_MONOCOTS_TEL_BAB2
+
+# 3.DESCHRAMBLER
+
+## 3.1compile using "make"
+
+## 3.2enter input docment location
+
+## 3.3<path to DESCHRAMBLER>/DESCHRAMBLER.pl \<path to the parameter file: params.txt\>
+
+    /home/wangshuai/DESSHR/DESCHRAMBLER-master/DESCHRAMBLER.pl /home/wangshuai/DESSHR/DESCHRAMBLER-master/examples/params.txt
+
+```
+ error   in TreeFunctionsI.pm line 94 use UNIVERSAL qw(isa) \> 
+         use Scalar::Util 'reftype';
+```

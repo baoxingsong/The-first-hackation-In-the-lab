@@ -1,0 +1,39 @@
+---
+title: "Qinlin Xu - First hackathon of Variants calling normalization"
+author: "Qinlin Xu"
+date: "`r format(Sys.Date(), '%Y-%m-%d')`"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+editor_options:
+  chunk_output_type: inline
+---
+
+# convert .maf files to .(g)vcf files
+
+    "home/xuql/tassel-5-standalone/run_pipeline.pl" -Xmx100G -debug -MAFToGVCFPlugin -referenceFasta "/home/xuql/NAM_anchorwave/B73/Zm-B73-REFERENCE-NAM-5.0.fa" -mafFile "/home/xuql/NAM_anchorwave/CML103/CML103.maf" -sampleName CML103_anchorwave -gvcfOutput /home/xuql/NAM_Maize_xql/CML103/CML103ToB73.gvcf -fillGaps false > /home/xuql/NAM_Maize_xql/CML103/CML103_outputMafToGVCF.txt 
+
+# make index
+
+    sed -i 's/chr//g' Zm-B73-REFERENCE-NAM-5.0_clean.fa
+    samtools  faidx Zm-B73-REFERENCE-NAM-5.0_clean.fa
+    samtools dict Zm-B73-REFERENCE-NAM-5.0_clean.fa > Zm-B73-REFERENCE-NAM-5.0_clean.dict
+
+# leftaglignment
+
+     gatk LeftAlignAndTrimVariants \
+       -R "/home/xql/Downloads/NAM_Maize/Zm-B73-REFERENCE-NAM-5.0_clean.fa" \
+       -V "/home/xql/Downloads/NAM_Maize/B97ToB73.gvcf" \
+       -O "/home/xql/Downloads/NAM_Maize/B97ToB73_gatk.vcf"
+       --max-indel-length 2000000
+
+# merge .vfc files
+
+      gatk --java-options "-Xmx400g -Xms400g" GenomicsDBImport \
+          -V "/home/xuql/NAM_Maize_xql/B97/B97ToB73_gatk.vcf" \
+          -V "/home/xuql/NAM_Maize_xql/CML103/CML103ToB73_gatk.vcf" \
+          --genomicsdb-workspace-path db_xql \
+          --tmp-dir /home/xuql/NAM_Maize_xql/tmp/ \
+          --genomicsdb-segment-size 1048576000 --genomicsdb-vcf-buffer-size 10000000000 \
+          -L 10
